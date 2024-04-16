@@ -2,6 +2,8 @@
 Ansible Playbook utilizing the VIO collections upgradevio module to upgrade a VIO from v3 to v4
 
 Various notes and observations while working on this:
+
+
 •	All you need from the VIO installation ISO, is the mksysb file located in /usr/sys/inst.images. You can use the viosupgrade -I command to extract it or just mount the iso and extract it from there. I did not try to use a customized mksysb image. Let me know if that’s worth testing. Not sure it would be a supported approach though.
 •	I ran the playbook without a login user override, so it ran as root on the VIO servers, using ssh keys from my Ansible master.
 •	Initially, to make things faster, I used the Ansible copy module to copy the mksysb to the VIO server. Even though I specified to store it in /home/padmin, during the transfer it temporarily used space in / since that’s where root’s home directory is located. Had to increase /’s size to make that work.
