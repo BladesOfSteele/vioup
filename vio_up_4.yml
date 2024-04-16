@@ -33,6 +33,8 @@
         msg: Fail
       when: ioslevel.stdout is version(min_vio_version, '<=')
 
+# -- Clean up from previous completed or failed upgrades --
+#
 # This doesn't work. If trying to remove without varying on, it fails because it's off
 # and if it's first varied on, cannon delete the LVS
 #    - name: delete any pre-existing altinst_rootvg, first vary on the VG
@@ -72,14 +74,16 @@
       ansible.builtin.shell: chpv -C {{ altinst_hdisk.stdout }}
       when: altinst_status.stat.exists
 
-      # Commit is not necessary, but figure it's not a bad idea
+# Commit is not necessary, but figure it's not a bad idea
     - name: commit all uncommitted updated
       ibm.power_vios.updateios:
         action: commit
       ignore_errors: true
 
-       # Can't just copy the file over and use it, non-existing files cause an error
-       #  so need to create a sublist of existing files
+# --- deal with save files file ---
+#
+# Can't just copy the file over and use it, non-existing files cause an error
+#  so need to create a sublist of existing files
 #    - name: copy '{{ save_file }}' to '{{ ansible_hostname }}'
 #      ansible.builtin.copy:
 #        src: '{{ save_file }}'
@@ -94,7 +98,7 @@
         - "{{ file_list.split('\n') }}"
       register: newlist
 
-    - name: Delete any existing "{{ dest_file }}"
+    - name: Delete any existing temporary save file - "{{ dest_file }}"
       file:
         path: "{{ dest_file }}"
         state: absent
@@ -114,7 +118,7 @@
       when:
         - item.stat.exists == true
 
-       # If using a copy of mksysb copied to the VIO server, this requires space in / since that's where the temporary files lives
+#  Warning: If using a copy of mksysb copied to the VIO server, this requires space in / since that's where the temporary files lives
 #    - name: Warning! Next step is copying the mksysb, so might take awhile
 #      debug:
 #        msg: "Please be patient during the file transfer"
@@ -133,7 +137,7 @@
         filesystem: '{{ image_mount }}'
         state: present
 
-      # Just for good housekeeping, store a copy of the configuration on the localhost
+# Just for good housekeeping, store a copy of the configuration on the localhost
     - name: Backup VIO configuration
       ibm.power_vios.viosbr:
         action: backup
@@ -145,7 +149,7 @@
         dest: /tmp/pre4upgradebackup.{{ ansible_hostname }}/
         flat: true
 
-      # Just a friendly reminder this will take a bit
+ # Just a friendly reminder this will take a bit
     - name: Warning! Next step is the actual install, patience
       debug:
         msg: "Please be patient during the mksysb restore"
@@ -173,6 +177,7 @@
       set_fact:
         ansible_python_interpreter=/usr/bin/python3
 
+# Redundant, but keeping just to have it and finish on the updated version message
     - name: Get current VIO version
       command: /usr/ios/cli/ioscli ioslevel
       register: ioslevel
