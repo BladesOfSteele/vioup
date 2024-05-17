@@ -1,25 +1,24 @@
 ---
-  - name: upgrade VIO server from v3 to v4
-    vars:
-    - ansible_python_interpreter: "{{ '/opt/freeware/bin/python3' }}"   # Necessary since on VIO 3, that's where python lives
-    - min_vio_version: 3.1.0.0                                          # Validate at least above
-    - save_file: vio_savefiles.txt                                      # Local list of files that get copied to v4 install
-    - image_name: vio_4_1_0_10_mksysb                                   # Name of mksysb image
-    - image_host: aix7_nim                                              # NFS server hosting image
-    - image_dir: /export/mksysb                                         # NFS directory containing image
-    - image_mount: /mnt                                                 # Mount point on VIO servers for NFS mount
-    - file_list: "{{ lookup('file', '{{ save_file }}') }}"              # List of files contained in safe_file
-    - dest_file: /tmp/savefiles.txt                                     # Name of file created on VIO that lists all files
-                                                                        #   in the save file that actually exists. Files that
-                                                                        #   don't exist, cause an error with viosupgrade, hence
-                                                                        #   the check if they exist
-    hosts: vio
-    gather_facts: true
-    collections:
+- name: upgrade VIO server from v3 to v4
+  vars:
+    - ansible_python_interpreter: "{{ '/opt/freeware/bin/python3' }}" # Necessary since on VIO 3, that's where python lives
+    - min_vio_version: 3.1.0.0 # Validate at least above
+    - save_file: vio_savefiles.txt # Local list of files that get copied to v4 install
+    - image_name: vio_4_1_0_10_mksysb # Name of mksysb image
+    - image_host: aix7_nim # NFS server hosting image
+    - image_dir: /export/mksysb # NFS directory containing image
+    - image_mount: /mnt # Mount point on VIO servers for NFS mount
+    - file_list: "{{ lookup('file', '{{ save_file }}') }}" # List of files contained in safe_file
+    - dest_file: /tmp/savefiles.txt # Name of file created on VIO that lists all files
+  #   in the save file that actually exists. Files that
+  #   don't exist, cause an error with viosupgrade, hence
+  #   the check if they exist
+  hosts: vio
+  gather_facts: true
+  collections:
     - ibm.power_aix
     - ibm.power_vios
-    tasks:
-
+  tasks:
     - name: Get current VIO version
       command: /usr/ios/cli/ioscli ioslevel
       register: ioslevel
@@ -33,23 +32,23 @@
         msg: Fail
       when: ioslevel.stdout is version(min_vio_version, '<=')
 
-# -- Clean up from previous completed or failed upgrades --
-#
-# This doesn't work. If trying to remove without varying on, it fails because it's off
-# and if it's first varied on, cannon delete the LVS
-#    - name: delete any pre-existing altinst_rootvg, first vary on the VG
-#      ibm.power_aix.lvg:
-#        vg_name: altinst_rootvg
-#        state: varyon
-#
-#    - name: delete any pre-existing altinst_rootvg
-#      ibm.power_aix.lvg:
-#        vg_name: altinst_rootvg
-#        delete_lvs: true
-#        force: true
-#        state: absent
-#
-# Here's the commands to achive the same thing.
+    # -- Clean up from previous completed or failed upgrades --
+    #
+    # This doesn't work. If trying to remove without varying on, it fails because it's off
+    # and if it's first varied on, cannon delete the LVS
+    #    - name: delete any pre-existing altinst_rootvg, first vary on the VG
+    #      ibm.power_aix.lvg:
+    #        vg_name: altinst_rootvg
+    #        state: varyon
+    #
+    #    - name: delete any pre-existing altinst_rootvg
+    #      ibm.power_aix.lvg:
+    #        vg_name: altinst_rootvg
+    #        delete_lvs: true
+    #        force: true
+    #        state: absent
+    #
+    # Here's the commands to achive the same thing.
     - name: Validate altinst_rootvg exists
       stat:
         path: /dev/altinst_rootvg
@@ -74,22 +73,22 @@
       ansible.builtin.shell: chpv -C {{ altinst_hdisk.stdout }}
       when: altinst_status.stat.exists
 
-# Commit is not necessary, but figure it's not a bad idea
+    # Commit is not necessary, but figure it's not a bad idea
     - name: commit all uncommitted updated
       ibm.power_vios.updateios:
         action: commit
       ignore_errors: true
 
-# --- deal with save files file ---
-#
-# Can't just copy the file over and use it, non-existing files cause an error
-#  so need to create a sublist of existing files
-#    - name: copy '{{ save_file }}' to '{{ ansible_hostname }}'
-#      ansible.builtin.copy:
-#        src: '{{ save_file }}'
-#        dest: /home/padmin/'{{ save_file }}'
-#        owner: padmin
-#        group: staff
+    # --- deal with save files file ---
+    #
+    # Can't just copy the file over and use it, non-existing files cause an error
+    #  so need to create a sublist of existing files
+    #    - name: copy '{{ save_file }}' to '{{ ansible_hostname }}'
+    #      ansible.builtin.copy:
+    #        src: '{{ save_file }}'
+    #        dest: /home/padmin/'{{ save_file }}'
+    #        owner: padmin
+    #        group: staff
 
     - name: Grab the stats of all the files in "{{ save_file }}"
       stat:
@@ -118,26 +117,26 @@
       when:
         - item.stat.exists == true
 
-#  Warning: If using a copy of mksysb copied to the VIO server, this requires space in / since that's where the temporary files lives
-#    - name: Warning! Next step is copying the mksysb, so might take awhile
-#      debug:
-#        msg: "Please be patient during the file transfer"
-#
-#    - name: copy mksysb to VIO server
-#      ansible.builtin.copy:
-#        src: vio_4_1_0_10_mksysb
-#        dest: /home/padmin/vio_4_1_0_10_mksysb
-#        owner: padmin
-#        group: staff
+    #  Warning: If using a copy of mksysb copied to the VIO server, this requires space in / since that's where the temporary files lives
+    #    - name: Warning! Next step is copying the mksysb, so might take awhile
+    #      debug:
+    #        msg: "Please be patient during the file transfer"
+    #
+    #    - name: copy mksysb to VIO server
+    #      ansible.builtin.copy:
+    #        src: vio_4_1_0_10_mksysb
+    #        dest: /home/padmin/vio_4_1_0_10_mksysb
+    #        owner: padmin
+    #        group: staff
 
     - name: NFS mount of '{{ image_dir }}' from '{{ image_host }}'
       ibm.power_aix.filesystem:
-        nfs_server: '{{ image_host }}'
-        device: '{{ image_dir }}'
-        filesystem: '{{ image_mount }}'
+        nfs_server: "{{ image_host }}"
+        device: "{{ image_dir }}"
+        filesystem: "{{ image_mount }}"
         state: present
 
-# Just for good housekeeping, store a copy of the configuration on the localhost
+    # Just for good housekeeping, store a copy of the configuration on the localhost
     - name: Backup VIO configuration
       ibm.power_vios.viosbr:
         action: backup
@@ -152,11 +151,11 @@
  # Just a friendly reminder this will take a bit
     - name: Warning! Next step is the actual install, patience
       debug:
-        msg: "Please be patient during the mksysb restore"
+        msg: Please be patient during the mksysb restore
 
     - name: Upgrade VIO from v3 to v4
       ibm.power_vios.viosupgrade:
-        image_file: '{{ image_mount }}/{{ image_name }}'
+        image_file: "{{ image_mount }}/{{ image_name }}"
         mksysb_install_disks: hdisk2
         filename: /home/padmin/'{{ save_file }}'
         preserve_devname: true
@@ -167,17 +166,15 @@
     - name: Show some debug information
       debug:
         msg:
-          - "IOS level before {{ viosupgrade_var.ioslevel.before }}"
-          - "IOS level after {{ viosupgrade_var.ioslevel.after }}"
-          - "viosupgrade msg {{ viosupgrade_var.msg }}"
-          - "Old rootvg disk {{ viosupgrade_var.old_rootvg }}"
-
+          - IOS level before {{ viosupgrade_var.ioslevel.before }}
+          - IOS level after {{ viosupgrade_var.ioslevel.after }}
+          - viosupgrade msg {{ viosupgrade_var.msg }}
+          - Old rootvg disk {{ viosupgrade_var.old_rootvg }}
 
     - name: after upgrade, change python path to /usr/bin
-      set_fact:
-        ansible_python_interpreter=/usr/bin/python3
+      set_fact: ansible_python_interpreter=/usr/bin/python3
 
-# Redundant, but keeping just to have it and finish on the updated version message
+    # Redundant, but keeping just to have it and finish on the updated version message
     - name: Get current VIO version
       command: /usr/ios/cli/ioscli ioslevel
       register: ioslevel
