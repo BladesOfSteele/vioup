@@ -20,39 +20,40 @@
     - ibm.power_vios
   tasks:
     - name: Get current VIO version
-      command: /usr/ios/cli/ioscli ioslevel
       register: ioslevel
+      ansible.builtin.command: /usr/ios/cli/ioscli ioslevel
 
     - name: Display current VIO version
-      debug:
+      ansible.builtin.debug:
         msg: "The current version before the upgrade is {{ ioslevel.stdout }} "
 
     - name: Validate version is at least '{{ min_vio_version }}'
-      debug:
-        msg: Fail
       when: ioslevel.stdout is version(min_vio_version, '<=')
 
-    # -- Clean up from previous completed or failed upgrades --
-    #
-    # This doesn't work. If trying to remove without varying on, it fails because it's off
-    # and if it's first varied on, cannon delete the LVS
-    #    - name: delete any pre-existing altinst_rootvg, first vary on the VG
-    #      ibm.power_aix.lvg:
-    #        vg_name: altinst_rootvg
-    #        state: varyon
-    #
-    #    - name: delete any pre-existing altinst_rootvg
-    #      ibm.power_aix.lvg:
-    #        vg_name: altinst_rootvg
-    #        delete_lvs: true
-    #        force: true
-    #        state: absent
-    #
-    # Here's the commands to achive the same thing.
+      # -- Clean up from previous completed or failed upgrades --
+      #
+      # This doesn't work. If trying to remove without varying on, it fails because it's off
+      # and if it's first varied on, cannon delete the LVS
+      #    - name: delete any pre-existing altinst_rootvg, first vary on the VG
+      #      ibm.power_aix.lvg:
+      #        vg_name: altinst_rootvg
+      #        state: varyon
+      #
+      #    - name: delete any pre-existing altinst_rootvg
+      #      ibm.power_aix.lvg:
+      #        vg_name: altinst_rootvg
+      #        delete_lvs: true
+      #        force: true
+      #        state: absent
+      #
+      # Here's the commands to achive the same thing.
+      ansible.builtin.debug:
+        msg: Fail
+
     - name: Validate altinst_rootvg exists
-      stat:
-        path: /dev/altinst_rootvg
       register: altinst_status
+      ansible.builtin.stat:
+        path: /dev/altinst_rootvg
 
     - name: Get hdisk associated to altinst_rootvg
       ansible.builtin.shell: lspv |grep altinst_rootvg | awk '{ print $1 }'
@@ -91,43 +92,31 @@
     #        group: staff
 
     - name: Grab the stats of all the files in "{{ save_file }}"
-      stat:
-        path: "{{ item }}"
       with_items:
         - "{{ file_list.split('\n') }}"
       register: newlist
+      ansible.builtin.stat:
+        path: "{{ item }}"
 
     - name: Delete any existing temporary save file - "{{ dest_file }}"
-      file:
+      ansible.builtin.file:
         path: "{{ dest_file }}"
         state: absent
 
     - name: Create "{{ dest_file }}"
-      file:
+      ansible.builtin.file:
         path: "{{ dest_file }}"
         state: touch
 
     - name: Create a new list of files that only contain existing files
-      lineinfile:
-        line: "{{ item.stat.path }}"
-        insertafter: EOF
-        dest: "{{ dest_file }}"
       with_items:
         - "{{ newlist.results }}"
       when:
         - item.stat.exists == true
-
-    #  Warning: If using a copy of mksysb copied to the VIO server, this requires space in / since that's where the temporary files lives
-    #    - name: Warning! Next step is copying the mksysb, so might take awhile
-    #      debug:
-    #        msg: "Please be patient during the file transfer"
-    #
-    #    - name: copy mksysb to VIO server
-    #      ansible.builtin.copy:
-    #        src: vio_4_1_0_10_mksysb
-    #        dest: /home/padmin/vio_4_1_0_10_mksysb
-    #        owner: padmin
-    #        group: staff
+      ansible.builtin.lineinfile:
+        line: "{{ item.stat.path }}"
+        insertafter: EOF
+        dest: "{{ dest_file }}"
 
     - name: NFS mount of '{{ image_dir }}' from '{{ image_host }}'
       ibm.power_aix.filesystem:
@@ -150,7 +139,7 @@
 
  # Just a friendly reminder this will take a bit
     - name: Warning! Next step is the actual install, patience
-      debug:
+      ansible.builtin.debug:
         msg: Please be patient during the mksysb restore
 
     - name: Upgrade VIO from v3 to v4
@@ -164,7 +153,7 @@
       register: viosupgrade_var
 
     - name: Show some debug information
-      debug:
+      ansible.builtin.debug:
         msg:
           - IOS level before {{ viosupgrade_var.ioslevel.before }}
           - IOS level after {{ viosupgrade_var.ioslevel.after }}
@@ -172,13 +161,13 @@
           - Old rootvg disk {{ viosupgrade_var.old_rootvg }}
 
     - name: after upgrade, change python path to /usr/bin
-      set_fact: ansible_python_interpreter=/usr/bin/python3
+      ansible.builtin.set_fact:
+        ansible_python_interpreter: /usr/bin/python3
 
-    # Redundant, but keeping just to have it and finish on the updated version message
     - name: Get current VIO version
-      command: /usr/ios/cli/ioscli ioslevel
       register: ioslevel
+      ansible.builtin.command: /usr/ios/cli/ioscli ioslevel
 
     - name: Display current VIO version
-      debug:
+      ansible.builtin.debug:
         msg: "The current version after the upgrade is {{ ioslevel.stdout }} "
