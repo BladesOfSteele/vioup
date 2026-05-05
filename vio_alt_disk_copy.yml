@@ -1,0 +1,43 @@
+---
+- name: Create a new alt_disk_copy on a VIO server
+  hosts: all
+  vars:
+    alt_vg_name: altinst_rootvg
+    old_vg_name: old_rootvg
+  gather_facts: true
+
+  tasks:
+    - name: Get hdisk associated with altinst_rootvg
+      ansible.builtin.shell: |
+        set -o pipefail
+        lspv | egrep "{{ alt_vg_name }}|{{ old_vg_name }}" | awk '{print $1}'
+      register: altinst_hdisk
+      changed_when: altinst_hdisk.rc != 0
+
+    - name: Display altinst_hdisk
+      ansible.builtin.debug:
+        msg: "altinst_hdisk: {{ altinst_hdisk.stdout }}"
+
+    # The following commands apear to fail, when run on VIO servers. Opened a bug report:
+    # https://github.com/IBM/ansible-power-aix/issues/739
+    # - name: Clear the old alt_disk_copy
+    #   ibm.power_aix.alt_disk:
+    #     action: clean
+    #     allow_old_rootvg: true
+
+    # - name: Create a new one alt_disk_copy
+    #   ibm.power_aix.alt_disk:
+    #     action: copy
+    #     targets: "{{ altinst_hdisk.stdout }}"
+
+    - name: Clear the old rootvg
+      ansible.builtin.shell: |
+        set -o pipefail
+        alt_rootvg_op -X old_rootvg
+      changed_when: false
+
+    - name: Create a new alt_disk_copy
+      ansible.builtin.shell: |
+        set -o pipefail
+        alt_disk_copy -B -d {{ altinst_hdisk.stdout }}
+      changed_when: false
