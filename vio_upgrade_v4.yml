@@ -32,6 +32,10 @@
       ansible.builtin.fail:
         msg: "Fail, starting version is too old, must be at least {{ min_vio_version }} to use this playbook. Current version is {{ ioslevel.stdout }}"
 
+    - name: Exit successfully if already at target version '{{ target_version }}'
+      when: ioslevel.stdout is version(target_version, '>=')
+      ansible.builtin.meta: end_host
+
     - name: Add NFS mount for image host '{{ image_host }}' and directory '{{ image_dir }}'
       ibm.power_aix.filesystem:
         nfs_server: "{{ image_host }}"
