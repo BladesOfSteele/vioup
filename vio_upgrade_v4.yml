@@ -153,9 +153,10 @@
           - viosupgrade msg {{ viosupgrade_var.msg }}
           - Old rootvg disk {{ viosupgrade_var.old_rootvg }}
 
-    - name: NFS rmount of '{{ image_dir }}' from '{{ image_host }}'
+    - name: NFS unmount of '{{ image_dir }}' from '{{ image_host }}'
       ibm.power_aix.mount:
         mount_dir: "{{ image_dir }}"
+        mount_over_dir: "{{ image_mount }}"
         state: umount
 
     - name: Remove NFS mount for image host '{{ image_host }}' and directory '{{ image_dir }}'

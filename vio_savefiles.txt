@@ -1,6 +1,6 @@
 /opt/galileo/etc/gpe-agent-aix.conf
 /home/padmin/hi
-
+/.profile
 /etc/motd
 /etc/resolv.conf
 /etc/netsvc.conf
@@ -21,3 +21,4 @@
 /home/padmin/vio_savefiles.txt
 /etc/rc.tcpip
 /home/padmin/config/ntp.conf
+/usr/ios/cli/.profile
