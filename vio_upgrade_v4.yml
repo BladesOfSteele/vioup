@@ -1,42 +1,51 @@
 ---
 - name: Upgrade VIO server in v4 context
   vars:
-    - min_vio_version: 4.1.0.10 # Validate at least above
-    - save_file: vio_savefiles.txt # Local list of files that get copied to v4 install
-#    - image_name: vio_4_1_1_0_mksysb # Name of mksysb image
-#    - image_host: aix7_nim # NFS server hosting image
-#    - image_dir: /export/mksysb # NFS directory containing image
-    - image_mount: /mnt # Mount point on VIO servers for NFS mount
-    - file_list: "{{ lookup('file', '{{ save_file }}') }}" # List of files contained in safe_file
-    - dest_file: /tmp/vio_confirmed_savefiles.txt # Name of file created on VIO that lists all files
+    min_vio_version: 4.1.0.10 # Validate at least above
+    save_file: vio_savefiles.txt # Local list of files that get copied to v4 install
+#    image_name: vio_4_1_1_0_mksysb # Name of mksysb image
+#    image_host: aix7_nim # NFS server hosting image
+#    image_dir: /export/mksysb # NFS directory containing image
+    image_mount: /mnt
+    file_list: "{{ lookup('file', '{{ save_file }}') }}" # List of files contained in safe_file
+    dest_file: /tmp/vio_confirmed_savefiles.txt # Name of file created on VIO that lists all files
   #   in the save file that actually exists. Files that
   #   don't exist, cause an error with viosupgrade, hence
   #   the check if they exist
   hosts: all
-  gather_facts: true
-  collections:
-    - ibm.power_aix
-    - ibm.power_vios
+  gather_facts: false
+  # collections:
+  #   - ibm.power_aix
+  #   - ibm.power_vios
   tasks:
     - name: Get current VIO version
       register: ioslevel
       ansible.builtin.command: /usr/ios/cli/ioscli ioslevel
+      changed_when: ioslevel.rc != 0
 
     - name: Display current VIO version
       ansible.builtin.debug:
         msg: "The current version before the upgrade is {{ ioslevel.stdout }} "
 
     - name: Validate version is at least '{{ min_vio_version }}'
-      when: ioslevel.stdout is version(min_vio_version, '<=')
-      ansible.builtin.debug:
+      when: ioslevel.stdout is version(min_vio_version, '<')
+      ansible.builtin.fail:
         msg: "Fail, starting version is too old, must be at least {{ min_vio_version }} to use this playbook. Current version is {{ ioslevel.stdout }}"
 
-    - name: NFS mount of '{{ image_dir }}' from '{{ image_host }}'
+    - name: Add NFS mount for image host '{{ image_host }}' and directory '{{ image_dir }}'
       ibm.power_aix.filesystem:
         nfs_server: "{{ image_host }}"
         device: "{{ image_dir }}"
         filesystem: "{{ image_mount }}"
+        nfs_soft_mount: true
         state: present
+        fs_type: nfs
+        permissions: ro
+
+    - name: NFS mount of '{{ image_dir }}' from '{{ image_host }}'
+      ibm.power_aix.mount:
+        mount_dir: "{{ image_mount }}"
+        state: mount
 
     - name: Validate altinst_rootvg exists
       register: altinst_status
@@ -45,13 +54,17 @@
 
     - name: Fail if altinst_rootvg does not exist
       ansible.builtin.fail:
-      msg: "ERROR: /dev/altinst_rootvg not found. Unable to proceed with upgrade."
+        msg: "ERROR: /dev/altinst_rootvg not found. Unable to proceed with upgrade."
       when: not altinst_status.stat.exists
 
     - name: Get hdisk associated to altinst_rootvg
-      ansible.builtin.shell: lspv |grep altinst_rootvg | awk '{ print $1 }'
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail # <-- adding this will prevent surprises
+          lspv |grep altinst_rootvg | awk '{ print $1 }'
       register: altinst_hdisk
       when: altinst_status.stat.exists
+      changed_when: altinst_hdisk.rc != 0
 
     - name: Vary off the VG
       ibm.power_aix.lvg:
@@ -60,15 +73,19 @@
       when: altinst_status.stat.exists
 
     - name: Export VG for '{{ altinst_hdisk.stdout }}'
-      ansible.builtin.shell: exportvg altinst_rootvg
+      ansible.builtin.command: exportvg altinst_rootvg
       when: altinst_status.stat.exists
+      register: exportvg
+      changed_when: exportvg.rc != 0
 
     - name: Clear PV
-      ansible.builtin.shell: chpv -C {{ altinst_hdisk.stdout }}
+      ansible.builtin.command: chpv -C {{ altinst_hdisk.stdout }}
       when: altinst_status.stat.exists
+      register: chpv
+      changed_when: chpv.rc != 0
 
     # Commit is not necessary, but figure it's not a bad idea
-    - name: commit all uncommitted updated
+    - name: Commit all uncommitted updated
       ibm.power_vios.updateios:
         action: commit
       ignore_errors: true
@@ -105,12 +122,12 @@
     - name: Backup VIO configuration
       ibm.power_vios.viosbr:
         action: backup
-        file: /home/padmin/pre4upgradebackup.{{ ansible_hostname }}
+        file: "tmp/upgradebackup.{{ inventory_hostname }}"
 
     - name: Copy VIO Configuration
       ansible.builtin.fetch:
-        src: /home/padmin/pre4upgradebackup.{{ ansible_hostname }}.tar.gz
-        dest: /tmp/pre4upgradebackup.{{ ansible_hostname }}/
+        src: "tmp/upgradebackup.{{ inventory_hostname }}.tar.gz"
+        dest: /tmp/pre4upgradebackup.{{ inventory_hostname }}/
         flat: true
 
  # Just a friendly reminder this will take a bit
@@ -136,13 +153,23 @@
           - viosupgrade msg {{ viosupgrade_var.msg }}
           - Old rootvg disk {{ viosupgrade_var.old_rootvg }}
 
-    - name: After upgrade, change python path to /usr/bin
-      ansible.builtin.set_fact:
-        ansible_python_interpreter: /usr/bin/python3
+    - name: NFS rmount of '{{ image_dir }}' from '{{ image_host }}'
+      ibm.power_aix.mount:
+        mount_dir: "{{ image_dir }}"
+        state: umount
+
+    - name: Remove NFS mount for image host '{{ image_host }}' and directory '{{ image_dir }}'
+      ibm.power_aix.filesystem:
+        nfs_server: "{{ image_host }}"
+        device: "{{ image_dir }}"
+        filesystem: "{{ image_mount }}"
+        nfs_soft_mount: true
+        state: absent
 
     - name: Get new VIO version
-      register: ioslevel
       ansible.builtin.command: /usr/ios/cli/ioscli ioslevel
+      register: ioslevel
+      changed_when: ioslevel.rc != 0
 
     - name: Display new VIO version
       ansible.builtin.debug:
