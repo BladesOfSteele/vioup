@@ -42,12 +42,14 @@
     #     alt_disk_copy -B -d {{ altinst_hdisk.stdout }}
     #   changed_when: false
 
-    - name: Clean up old rootvg
+    - name: Clean up old rootvg if it exists
       ibm.power_vios.alt_root_vg:
         targets: "{{ altinst_hdisk.stdout }}"
         action: clean
+      when: altinst_hdisk.stdout != ""
 
-    - name: Create new alt_disk_copy
-      ibm.power_vios.alt_disk_copy:
+    - name: Create new alt_disk_copy if altinst_hdisk is found
+      ibm.power_vios.alt_root_vg:
         targets: "{{ altinst_hdisk.stdout }}"
         action: copy
+      when: altinst_hdisk.stdout != ""
